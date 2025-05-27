@@ -266,7 +266,6 @@ export function useCanvasDrawing({
     lineCreated,
     interpolationType,
     canvasDims,
-    drawingParams,
     setInterpFormula,
     calculatedOriginX,
     calculatedOriginY,

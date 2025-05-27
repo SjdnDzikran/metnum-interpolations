@@ -16,7 +16,7 @@ import { useCanvasDrawing } from "@/hooks/useCanvasDrawing";
 import { CanvasPlotter } from "@/components/CanvasPlotter";
 
 // Import icons from lucide-react
-import { Trash2, Eraser, LineChart, Settings, ListChecks, PanelLeftClose, PanelRightClose, Maximize, Minimize } from "lucide-react";
+import { Trash2, Eraser, LineChart, Settings, ListChecks, PanelLeftClose, PanelRightClose } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area"; // For potentially scrollable sidebar
 
