@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,8 +17,7 @@ interface Point {
   y: number;
 }
 
-// --- Helper Functions (Translated from Python) ---
-
+// --- Helper Functions (Unchanged) ---
 // Function to evaluate the Lagrange polynomial at a given x
 function evaluateLagrangePolynomial(
   x: number,
@@ -54,7 +53,6 @@ function calculateDividedDifferences(
   if (n === 0) return [];
 
   const ddTable: number[][] = [];
-  // Initialize the first column with y-coordinates
   ddTable.push([...yCoords]);
 
   for (let k = 1; k < n; k++) {
@@ -63,19 +61,15 @@ function calculateDividedDifferences(
     for (let i = 0; i < n - k; i++) {
       const denominator = xCoords[i + k] - xCoords[i];
       if (denominator === 0) {
-        // Handle division by zero (e.g., duplicate x-coordinates)
-        // In a real app, you might want to show an error or handle this more gracefully
         console.error("Error: Duplicate x-coordinates detected.");
         return [];
       }
       const diff = (prevCol[i + 1] - prevCol[i]) / denominator;
       newCol.push(diff);
     }
-    if (newCol.length === 0) break; // No more differences can be calculated
+    if (newCol.length === 0) break;
     ddTable.push(newCol);
   }
-
-  // The coefficients are the first elements of each column
   const coefficients = ddTable.map((col) => col[0]);
   return coefficients;
 }
@@ -120,59 +114,157 @@ function evaluateNewtonPolynomial(
   return result;
 }
 
+
+// Constants for the logical coordinate system
+const LOGICAL_X_MIN = -10;
+const LOGICAL_X_MAX = 10;
+const LOGICAL_Y_MIN = -10;
+const LOGICAL_Y_MAX = 10;
+const LOGICAL_X_RANGE = LOGICAL_X_MAX - LOGICAL_X_MIN;
+const LOGICAL_Y_RANGE = LOGICAL_Y_MAX - LOGICAL_Y_MIN;
+
 export default function HomePage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasContainerRef = useRef<HTMLDivElement>(null); // Ref for the canvas container
+
   const [points, setPoints] = useState<Point[]>([]);
-  const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(
-    null
-  );
+  const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
   const [interpFormula, setInterpFormula] = useState<string>(
     "P(x) = (belum ada/cukup titik)"
   );
   const [lineCreated, setLineCreated] = useState(false);
-  const [interpolationType, setInterpolationType] = useState<"Newton" | "Lagrange">(
-    "Newton"
-  );
-  const canvasWidth = 800;
-  const canvasHeight = 600;
-  const padding = 50; // Padding for axes
-  const scaleX = (canvasWidth - 2 * padding) / 20; // Assuming x-range from -10 to 10
-  const scaleY = (canvasHeight - 2 * padding) / 20; // Assuming y-range from -10 to 10
-  const originX = canvasWidth / 2;
-  const originY = canvasHeight / 2;
+  const [interpolationType, setInterpolationType] = useState<"Newton" | "Lagrange">("Newton");
+
+  // State for dynamic canvas dimensions
+  const [canvasDims, setCanvasDims] = useState({ width: 800, height: 600 });
+
   const dragThreshold = 5; // Pixels for point selection
 
-  // Coordinate transformation functions
-  const toCanvasX = (x: number) => originX + x * scaleX;
-  const toCanvasY = (y: number) => originY - y * scaleY; // Y-axis is inverted in canvas
-  const toDataX = (cx: number) => (cx - originX) / scaleX;
-  const toDataY = (cy: number) => (originY - cy) / scaleY;
+  // Effect to observe container size and update canvas dimensions
+  useEffect(() => {
+    const container = canvasContainerRef.current;
+    if (!container) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setCanvasDims((prevDims) => {
+            // Only update if dimensions actually changed to avoid unnecessary re-renders
+            if (prevDims.width !== Math.round(width) || prevDims.height !== Math.round(height)) {
+              return { width: Math.round(width), height: Math.round(height) };
+            }
+            return prevDims;
+          });
+        }
+      }
+    });
+
+    resizeObserver.observe(container);
+
+    // Set initial size from container after mount
+    const { clientWidth, clientHeight } = container;
+    if (clientWidth > 0 && clientHeight > 0) {
+      setCanvasDims({ width: clientWidth, height: clientHeight });
+    }
+
+    return () => {
+      resizeObserver.unobserve(container);
+      resizeObserver.disconnect();
+    };
+  }, []); // Runs once on mount
+
+  // Memoized drawing parameters and transformation functions
+  const drawingParams = useMemo(() => {
+    const { width: currentCanvasWidth, height: currentCanvasHeight } = canvasDims;
+
+    if (currentCanvasWidth <= 0 || currentCanvasHeight <= 0) {
+      return {
+        scaleX: 1, scaleY: 1, originX: 0, originY: 0,
+        toCanvasX: (x: number) => x, toCanvasY: (y: number) => y,
+        toDataX: (cx: number) => cx, toDataY: (cy: number) => cy,
+        currentCanvasWidth, currentCanvasHeight, padding: 0,
+        isValid: false,
+      };
+    }
+
+    const PADDING_MIN = 10;
+    const PADDING_MAX = 50;
+    const PADDING_RATIO = 0.05; // 5% of smaller dimension
+
+    let calculatedPadding = Math.min(currentCanvasWidth, currentCanvasHeight) * PADDING_RATIO;
+    calculatedPadding = Math.max(PADDING_MIN, calculatedPadding);
+    calculatedPadding = Math.min(PADDING_MAX, calculatedPadding);
+    calculatedPadding = Math.min(calculatedPadding, currentCanvasWidth / 2.1, currentCanvasHeight / 2.1);
+
+
+    const plotAreaWidth = currentCanvasWidth - 2 * calculatedPadding;
+    const plotAreaHeight = currentCanvasHeight - 2 * calculatedPadding;
+
+    if (plotAreaWidth <= 0 || plotAreaHeight <= 0) {
+       return { /* Same fallback as above for very small canvas */
+        scaleX: 1, scaleY: 1, originX: currentCanvasWidth/2, originY: currentCanvasHeight/2,
+        toCanvasX: (x: number) => x, toCanvasY: (y: number) => y,
+        toDataX: (cx: number) => cx, toDataY: (cy: number) => cy,
+        currentCanvasWidth, currentCanvasHeight, padding: calculatedPadding,
+        isValid: false,
+      };
+    }
+
+    const finalOriginX = calculatedPadding + plotAreaWidth / 2;
+    const finalOriginY = calculatedPadding + plotAreaHeight / 2;
+
+    const finalScaleX = plotAreaWidth / LOGICAL_X_RANGE;
+    const finalScaleY = plotAreaHeight / LOGICAL_Y_RANGE;
+
+    const toCanvasX = (x: number) => finalOriginX + x * finalScaleX;
+    const toCanvasY = (y: number) => finalOriginY - y * finalScaleY; // Y-axis is inverted
+
+    const toDataX = (cx: number) => (cx - finalOriginX) / finalScaleX;
+    const toDataY = (cy: number) => (finalOriginY - cy) / finalScaleY;
+
+    return {
+      scaleX: finalScaleX, scaleY: finalScaleY,
+      originX: finalOriginX, originY: finalOriginY,
+      toCanvasX, toCanvasY, toDataX, toDataY,
+      currentCanvasWidth, currentCanvasHeight,
+      padding: calculatedPadding,
+      isValid: true,
+    };
+  }, [canvasDims]);
+
+  const {
+    toCanvasX, toCanvasY, toDataX, toDataY,
+    originX: calculatedOriginX, originY: calculatedOriginY,
+    isValid: drawingParamsValid,
+  } = drawingParams;
+
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !drawingParamsValid || canvasDims.width === 0 || canvasDims.height === 0) return;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+    ctx.clearRect(0, 0, canvasDims.width, canvasDims.height);
 
     // Draw grid
     ctx.strokeStyle = "#eee";
     ctx.lineWidth = 1;
-
-    // Vertical lines
-    for (let x = -10; x <= 10; x++) {
+    for (let x = Math.ceil(LOGICAL_X_MIN); x <= Math.floor(LOGICAL_X_MAX); x++) {
       ctx.beginPath();
-      ctx.moveTo(toCanvasX(x), 0);
-      ctx.lineTo(toCanvasX(x), canvasHeight);
+      const cx = toCanvasX(x);
+      ctx.moveTo(cx, 0);
+      ctx.lineTo(cx, canvasDims.height);
       ctx.stroke();
     }
-    // Horizontal lines
-    for (let y = -10; y <= 10; y++) {
+    for (let y = Math.ceil(LOGICAL_Y_MIN); y <= Math.floor(LOGICAL_Y_MAX); y++) {
       ctx.beginPath();
-      ctx.moveTo(0, toCanvasY(y));
-      ctx.lineTo(canvasWidth, toCanvasY(y));
+      const cy = toCanvasY(y);
+      ctx.moveTo(0, cy);
+      ctx.lineTo(canvasDims.width, cy);
       ctx.stroke();
     }
 
@@ -180,19 +272,20 @@ export default function HomePage() {
     ctx.strokeStyle = "#aaa";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(0, originY);
-    ctx.lineTo(canvasWidth, originY);
+    ctx.moveTo(0, calculatedOriginY);
+    ctx.lineTo(canvasDims.width, calculatedOriginY);
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(originX, 0);
-    ctx.lineTo(originX, canvasHeight);
+    ctx.moveTo(calculatedOriginX, 0);
+    ctx.lineTo(calculatedOriginX, canvasDims.height);
     ctx.stroke();
 
     // Draw points
-    ctx.fillStyle = "#60A5FA"; // A shade of blue for points
+    ctx.fillStyle = "#60A5FA";
+    const pointRadius = Math.max(3, Math.min(5, canvasDims.width / 100)); // Dynamic point size
     points.forEach((p) => {
       ctx.beginPath();
-      ctx.arc(toCanvasX(p.x), toCanvasY(p.y), 5, 0, Math.PI * 2);
+      ctx.arc(toCanvasX(p.x), toCanvasY(p.y), pointRadius, 0, Math.PI * 2);
       ctx.fill();
     });
 
@@ -201,7 +294,7 @@ export default function HomePage() {
       const sortedPoints = [...points].sort((a, b) => a.x - b.x);
       const uniqueXCoords = Array.from(new Set(sortedPoints.map((p) => p.x)));
       const uniqueYCoords = uniqueXCoords.map(
-        (x) => sortedPoints.find((p) => p.x === x)?.y || 0
+        (xVal) => sortedPoints.find((p) => p.x === xVal)?.y || 0
       );
 
       if (uniqueXCoords.length >= 2) {
@@ -209,43 +302,59 @@ export default function HomePage() {
         let formulaString: string;
 
         if (interpolationType === "Newton") {
-          const coefficients = calculateDividedDifferences(
-            uniqueXCoords,
-            uniqueYCoords
-          );
+          const coefficients = calculateDividedDifferences(uniqueXCoords, uniqueYCoords);
           if (coefficients.length > 0) {
-            evaluatedY = (x) => evaluateNewtonPolynomial(x, uniqueXCoords, coefficients);
+            evaluatedY = (xVal) => evaluateNewtonPolynomial(xVal, uniqueXCoords, coefficients);
             formulaString = generateNewtonPolynomialFormula(uniqueXCoords, coefficients);
           } else {
-            setInterpFormula("Error: Duplicate x-coordinates or calculation issue (Newton).");
+            setInterpFormula("Error: Calculation issue (Newton).");
             return;
           }
         } else { // Lagrange
-          evaluatedY = (x) => evaluateLagrangePolynomial(x, uniqueXCoords, uniqueYCoords);
-          formulaString = "P(x) = (Lagrange Polynomial)";
+          evaluatedY = (xVal) => evaluateLagrangePolynomial(xVal, uniqueXCoords, uniqueYCoords);
+          formulaString = "P(x) = (Lagrange Polynomial)"; // Placeholder, actual formula can be very long
         }
-
         setInterpFormula(formulaString);
 
-        ctx.strokeStyle = "#8B5CF6"; // A shade of purple for the line
+        ctx.strokeStyle = "#8B5CF6";
         ctx.lineWidth = 2;
         ctx.beginPath();
 
-        // Calculate plot range based on canvas visible area
         const xMinPlot = toDataX(0);
-        const xMaxPlot = toDataX(canvasWidth);
-        const numSegments = 200;
+        const xMaxPlot = toDataX(canvasDims.width);
+        const numSegments = Math.max(100, Math.min(300, canvasDims.width / 2)); // Dynamic segments
         const step = (xMaxPlot - xMinPlot) / numSegments;
+
+        let wasLastPointInBounds = false; // Flag to track if the previous point was within the generous bounds
 
         for (let i = 0; i <= numSegments; i++) {
           const x = xMinPlot + i * step;
           const y = evaluatedY(x);
-
-          if (i === 0) {
-            ctx.moveTo(toCanvasX(x), toCanvasY(y));
-          } else {
-            ctx.lineTo(toCanvasX(x), toCanvasY(y));
+          if (isNaN(y)) {
+            wasLastPointInBounds = false; // Treat NaN as out of bounds, break the line
+            continue;
           }
+
+          const canvasX = toCanvasX(x);
+          const canvasY = toCanvasY(y);
+
+          const currentPointIsInBounds = !(canvasY < -canvasDims.height * 2 || canvasY > canvasDims.height * 3);
+
+          if (currentPointIsInBounds) {
+            if (i === 0 || !wasLastPointInBounds) {
+              // If it's the very first point, or the previous point was out of bounds,
+              // start a new segment.
+              ctx.moveTo(canvasX, canvasY);
+            } else {
+              // If the current point is in bounds and the previous was also in bounds,
+              // continue the line.
+              ctx.lineTo(canvasX, canvasY);
+            }
+          }
+          // If currentPointIsInBounds is false, we do nothing (don't draw to it),
+          // and wasLastPointInBounds will be set to false for the next iteration,
+          // ensuring the next in-bounds point starts a new segment.
+          wasLastPointInBounds = currentPointIsInBounds;
         }
         ctx.stroke();
       } else {
@@ -253,54 +362,55 @@ export default function HomePage() {
       }
     } else if (!lineCreated) {
       setInterpFormula("P(x) = (garis tidak ditampilkan)");
-    } else {
+    } else if (points.length < 2) {
       setInterpFormula("P(x) = (belum ada/cukup titik)");
     }
-  }, [points, originX, originY, scaleX, scaleY, lineCreated, interpolationType]);
+  }, [points, lineCreated, interpolationType, canvasDims, drawingParams, setInterpFormula]); // Added drawingParamsValid and setInterpFormula
 
   useEffect(() => {
     draw();
-  }, [draw]);
+  }, [draw]); // Rerun draw when the draw function itself changes (due to its dependencies)
 
   const handleMouseDown = (event: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !drawingParamsValid) return;
 
     const rect = canvas.getBoundingClientRect();
-    const clientX = event.clientX;
-    const clientY = event.clientY;
+    const canvasElementX = event.clientX - rect.left;
+    const canvasElementY = event.clientY - rect.top;
 
-    const canvasX = clientX - rect.left;
-    const canvasY = clientY - rect.top;
+    const dataX = toDataX(canvasElementX);
+    const dataY = toDataY(canvasElementY);
 
-    const dataX = toDataX(canvasX);
-    const dataY = toDataY(canvasY);
+    // Round dataX and dataY to a reasonable precision to avoid floating point issues
+    const roundedDataX = parseFloat(dataX.toFixed(2));
+    const roundedDataY = parseFloat(dataY.toFixed(2));
 
-    if (event.button === 0) {
-      // Left click
+
+    if (event.button === 0) { // Left click
       let foundPoint = false;
       for (let i = 0; i < points.length; i++) {
         const p = points[i];
         const dist = Math.sqrt(
-          (toCanvasX(p.x) - canvasX) ** 2 + (toCanvasY(p.y) - canvasY) ** 2
+          (toCanvasX(p.x) - canvasElementX) ** 2 + (toCanvasY(p.y) - canvasElementY) ** 2
         );
-        if (dist < dragThreshold) {
+        if (dist < dragThreshold * 2) { // Increase threshold slightly for easier grabbing
           setSelectedPointIndex(i);
           foundPoint = true;
           break;
         }
       }
       if (!foundPoint) {
-        setPoints((prev) => [...prev, { x: dataX, y: dataY }]);
+        setPoints((prev) => [...prev, { x: roundedDataX, y: roundedDataY }]);
       }
-    } else if (event.button === 2) {
-      // Right click
+    } else if (event.button === 2) { // Right click
+      event.preventDefault(); // Prevent context menu
       for (let i = 0; i < points.length; i++) {
         const p = points[i];
         const dist = Math.sqrt(
-          (toCanvasX(p.x) - canvasX) ** 2 + (toCanvasY(p.y) - canvasY) ** 2
+          (toCanvasX(p.x) - canvasElementX) ** 2 + (toCanvasY(p.y) - canvasElementY) ** 2
         );
-        if (dist < dragThreshold) {
+        if (dist < dragThreshold * 2) {
           setPoints((prev) => prev.filter((_, index) => index !== i));
           break;
         }
@@ -309,22 +419,22 @@ export default function HomePage() {
   };
 
   const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (selectedPointIndex === null) return;
+    if (selectedPointIndex === null || !drawingParamsValid) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const clientX = event.clientX;
-    const clientY = event.clientY;
+    const canvasElementX = event.clientX - rect.left;
+    const canvasElementY = event.clientY - rect.top;
 
-    const canvasX = clientX - rect.left;
-    const canvasY = clientY - rect.top;
-
-    const dataX = toDataX(canvasX);
-    const dataY = toDataY(canvasY);
+    const dataX = toDataX(canvasElementX);
+    const dataY = toDataY(canvasElementY);
+    
+    const roundedDataX = parseFloat(dataX.toFixed(2));
+    const roundedDataY = parseFloat(dataY.toFixed(2));
 
     setPoints((prev) =>
-      prev.map((p, i) => (i === selectedPointIndex ? { x: dataX, y: dataY } : p))
+      prev.map((p, i) => (i === selectedPointIndex ? { x: roundedDataX, y: roundedDataY } : p))
     );
   };
 
@@ -335,53 +445,60 @@ export default function HomePage() {
   const handleClearPoints = () => {
     setPoints([]);
     setSelectedPointIndex(null);
-    setLineCreated(false); // Reset lineCreated when points are cleared
+    setLineCreated(false);
+    setInterpFormula("P(x) = (belum ada/cukup titik)");
   };
 
   return (
-    <div className="flex justify-center items-center min-h-screen bg-gray-100 dark:bg-gray-900 p-4">
+    <div className="flex justify-center items-center min-h-screen bg-gray-100 dark:bg-gray-900 p-2 sm:p-4">
       <Card className="w-full max-w-4xl shadow-lg">
         <CardHeader>
-          <CardTitle className="text-2xl font-bold text-center">
-            Interpolasi Newton
+          <CardTitle className="text-xl sm:text-2xl font-bold text-center">
+            Interpolasi Newton & Lagrange
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col items-center gap-4">
-          <div className="relative w-[800px] h-[600px] border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+          {/* Responsive Canvas Container */}
+          <div
+            ref={canvasContainerRef}
+            className="relative w-full aspect-[4/3] border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden"
+          >
             <canvas
               ref={canvasRef}
-              width={canvasWidth}
-              height={canvasHeight}
+              width={canvasDims.width}   // Dynamically set width
+              height={canvasDims.height} // Dynamically set height
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
-              onContextMenu={(e) => e.preventDefault()} // Prevent right-click context menu
-              className="cursor-crosshair"
+              onContextMenu={(e) => e.preventDefault()}
+              className="cursor-crosshair block" // `block` to remove potential extra space below
             />
-            <div className="absolute bottom-2 left-2 text-xs text-gray-600 dark:text-gray-400">
-              Klik Kiri: Tambah/Drag Titik, Klik Kanan: Hapus Titik
+            <div className="absolute bottom-1 left-1 sm:bottom-2 sm:left-2 text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 bg-white/70 dark:bg-black/70 px-1 rounded">
+              L-Klik: Add/Drag | R-Klik: Hapus
             </div>
           </div>
-          <div className="w-full flex flex-col gap-2 mt-4">
-            <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Rumus Interpolasi P(x):
-            </div>
-            <div className="w-full flex flex-col gap-2">
-              <label htmlFor="interpolation-type" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Pilih Metode Interpolasi:
-              </label>
-              <Select
-                value={interpolationType}
-                onValueChange={(value: "Newton" | "Lagrange") => setInterpolationType(value)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Pilih Metode" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Newton">Newton</SelectItem>
-                  <SelectItem value="Lagrange">Lagrange</SelectItem>
-                </SelectContent>
-              </Select>
+          <div className="w-full flex flex-col gap-3 mt-2">
+            <div className="w-full flex flex-col sm:flex-row gap-2 items-center">
+                <label htmlFor="interpolation-type" className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                    Metode:
+                </label>
+                <Select
+                    value={interpolationType}
+                    onValueChange={(value: "Newton" | "Lagrange") => {
+                        setInterpolationType(value);
+                        // Reset formula text when type changes and points exist
+                        if (points.length >=2) setLineCreated(false); // force recalculation if line exists
+                        else setInterpFormula("P(x) = (belum ada/cukup titik)");
+                    }}
+                >
+                    <SelectTrigger className="w-full sm:w-auto flex-grow">
+                    <SelectValue placeholder="Pilih Metode" />
+                    </SelectTrigger>
+                    <SelectContent>
+                    <SelectItem value="Newton">Newton</SelectItem>
+                    <SelectItem value="Lagrange">Lagrange</SelectItem>
+                    </SelectContent>
+                </Select>
             </div>
             <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
               Rumus Interpolasi P(x):
@@ -389,21 +506,19 @@ export default function HomePage() {
             <Input
               value={interpFormula}
               readOnly
-              className="w-full font-mono text-sm overflow-x-auto"
+              className="w-full font-mono text-xs sm:text-sm overflow-x-auto p-2 h-auto"
             />
-            </div>
-          </CardContent>
-          <CardContent className="flex flex-col items-center gap-4">
-            <div className="flex gap-2 w-full">
-              <Button onClick={handleClearPoints} className="flex-1">
-                Clear All Points
-              </Button>
-              <Button onClick={() => setLineCreated(true)} className="flex-1">
-                Create Line
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 w-full mt-2">
+            <Button onClick={handleClearPoints} variant="outline" className="flex-1">
+              Clear Points
+            </Button>
+            <Button onClick={() => setLineCreated(true)} className="flex-1" disabled={points.length < 2}>
+              Create Line
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
