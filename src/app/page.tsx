@@ -189,7 +189,7 @@ export default function HomePage() {
     ctx.stroke();
 
     // Draw points
-    ctx.fillStyle = "blue";
+    ctx.fillStyle = "#60A5FA"; // A shade of blue for points
     points.forEach((p) => {
       ctx.beginPath();
       ctx.arc(toCanvasX(p.x), toCanvasY(p.y), 5, 0, Math.PI * 2);
@@ -227,12 +227,13 @@ export default function HomePage() {
 
         setInterpFormula(formulaString);
 
-        ctx.strokeStyle = "red";
+        ctx.strokeStyle = "#8B5CF6"; // A shade of purple for the line
         ctx.lineWidth = 2;
         ctx.beginPath();
 
-        const xMinPlot = -10; // Use fixed plot range for now
-        const xMaxPlot = 10;
+        // Calculate plot range based on canvas visible area
+        const xMinPlot = toDataX(0);
+        const xMaxPlot = toDataX(canvasWidth);
         const numSegments = 200;
         const step = (xMaxPlot - xMinPlot) / numSegments;
 
@@ -390,6 +391,9 @@ export default function HomePage() {
               readOnly
               className="w-full font-mono text-sm overflow-x-auto"
             />
+            </div>
+          </CardContent>
+          <CardContent className="flex flex-col items-center gap-4">
             <div className="flex gap-2 w-full">
               <Button onClick={handleClearPoints} className="flex-1">
                 Clear All Points
@@ -398,9 +402,8 @@ export default function HomePage() {
                 Create Line
               </Button>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
