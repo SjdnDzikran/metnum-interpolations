@@ -75,7 +75,7 @@ export default function HomePage() {
         <CardContent className="flex flex-col lg:flex-row gap-4 sm:gap-6 px-3 pb-3 pt-0 sm:px-4 sm:pb-4 sm:pt-0 md:px-6 md:pb-6 md:pt-0">
           {/* Left Column: Canvas and its primary actions */}
           <div className={`flex flex-col gap-4 ${isSidebarOpen ? 'lg:w-3/5 xl:w-[calc(66.66%-0.75rem)]' : 'lg:w-full'} transition-all duration-300 ease-in-out`}> {/* Adjust width based on sidebar state */}
-            <div className="flex flex-col sm:flex-row gap-3 w-full items-center">
+            <div className="flex flex-row gap-3 w-full items-center">
               <Button onClick={handleClearPoints} variant="outline" className="flex-1 text-sm sm:text-base py-2.5">
                 <Eraser className="mr-2 h-4 w-4" /> Clear Titik
               </Button>
