@@ -40,6 +40,12 @@ export default function HomePage() {
     setInterpFormula("P(x) = (belum ada/cukup titik)");
   };
 
+  const handleRemovePoint = (indexToRemove: number) => {
+    setPoints((prev) => prev.filter((_, index) => index !== indexToRemove));
+    setSelectedPointIndex(null); // Deselect any point if it was the one removed
+    setLineCreated(false); // Force recalculation of line
+  };
+
   return (
     <div className="flex justify-center items-center min-h-screen bg-gray-100 dark:bg-gray-900 p-2 sm:p-4">
       <Card className="w-full max-w-4xl shadow-lg">
@@ -90,6 +96,35 @@ export default function HomePage() {
               readOnly
               className="w-full font-mono text-xs sm:text-sm overflow-x-auto p-2 h-auto"
             />
+            {/* New section for points list */}
+            <div className="w-full mt-4">
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Daftar Titik:
+              </h3>
+              <div className="max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded p-2 bg-gray-50 dark:bg-gray-700/30">
+                {points.length === 0 ? (
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Belum ada titik.</p>
+                ) : (
+                  <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+                    {points.map((p, index) => (
+                      <li key={index} className="flex justify-between items-center py-2 px-3">
+                        <span className="inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200">
+                          ({p.x.toFixed(2)}, {p.y.toFixed(2)})
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemovePoint(index)}
+                          className="text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 h-8 px-2"
+                        >
+                          Hapus
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 w-full mt-2">
             <Button onClick={handleClearPoints} variant="outline" className="flex-1">
