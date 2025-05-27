@@ -69,6 +69,20 @@ export default function HomePage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col items-center gap-6 p-4 sm:p-6"> {/* Increased gap and padding */}
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row gap-3 w-full pt-0">
+            <Button onClick={handleClearPoints} variant="outline" className="flex-1 text-base py-2.5">
+              <Eraser className="mr-2 h-4 w-4" /> Clear Semua Titik
+            </Button>
+            <Button
+              onClick={() => setLineCreated(true)}
+              className="flex-1 text-base py-2.5"
+              disabled={points.length < 2}
+            >
+              <LineChart className="mr-2 h-4 w-4" /> Buat Garis Interpolasi
+            </Button>
+          </div>
+
           <CanvasPlotter
             canvasRef={canvasRef}
             canvasContainerRef={canvasContainerRef}
@@ -168,20 +182,6 @@ export default function HomePage() {
           </div>
 
           <Separator className="my-2"/>
-
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-3 w-full pt-2">
-            <Button onClick={handleClearPoints} variant="outline" className="flex-1 text-base py-2.5">
-              <Eraser className="mr-2 h-4 w-4" /> Clear Semua Titik
-            </Button>
-            <Button
-              onClick={() => setLineCreated(true)}
-              className="flex-1 text-base py-2.5"
-              disabled={points.length < 2}
-            >
-              <LineChart className="mr-2 h-4 w-4" /> Buat Garis Interpolasi
-            </Button>
-          </div>
         </CardContent>
       </Card>
     </div>
