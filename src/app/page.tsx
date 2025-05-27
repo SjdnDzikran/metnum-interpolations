@@ -4,6 +4,13 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface Point {
   x: number;
@@ -362,15 +369,18 @@ export default function HomePage() {
               <label htmlFor="interpolation-type" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 Pilih Metode Interpolasi:
               </label>
-              <select
-                id="interpolation-type"
+              <Select
                 value={interpolationType}
-                onChange={(e) => setInterpolationType(e.target.value as "Newton" | "Lagrange")}
-                className="p-2 border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
+                onValueChange={(value: "Newton" | "Lagrange") => setInterpolationType(value)}
               >
-                <option value="Newton">Newton</option>
-                <option value="Lagrange">Lagrange</option>
-              </select>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Pilih Metode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Newton">Newton</SelectItem>
+                  <SelectItem value="Lagrange">Lagrange</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
               Rumus Interpolasi P(x):
