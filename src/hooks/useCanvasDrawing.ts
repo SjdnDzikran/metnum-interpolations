@@ -139,7 +139,7 @@ export function useCanvasDrawing({
   }, [canvasDims]);
 
   const {
-    toCanvasX, toCanvasY, toDataX, toDataY,
+    toCanvasX, toCanvasY, toDataX, // toDataY is not used in draw function
     originX: calculatedOriginX, originY: calculatedOriginY,
     isValid: drawingParamsValid,
   } = drawingParams;
@@ -261,7 +261,20 @@ export function useCanvasDrawing({
     } else if (points.length < 2) {
       setInterpFormula("P(x) = (belum ada/cukup titik)");
     }
-  }, [points, lineCreated, interpolationType, canvasDims, drawingParams, setInterpFormula]);
+  }, [
+    points,
+    lineCreated,
+    interpolationType,
+    canvasDims,
+    drawingParams,
+    setInterpFormula,
+    calculatedOriginX,
+    calculatedOriginY,
+    drawingParamsValid,
+    toCanvasX,
+    toCanvasY,
+    toDataX,
+  ]);
 
   useEffect(() => {
     draw();
