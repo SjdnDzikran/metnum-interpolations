@@ -1,0 +1,66 @@
+name: Trigger Vercel deployment
+
+on:
+  push:
+    branches: [master]
+
+permissions: {}
+
+jobs:
+  trigger:
+    # Check the commit author, including when someone else merges your PR.
+    if: github.event.head_commit != null && github.event.head_commit.author.username != 'SjdnDzikran'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: vercel-deployment-${{ github.ref_name }}
+      cancel-in-progress: false
+    steps:
+      - name: Create a verified owner-authored empty commit
+        env:
+          GH_TOKEN: ${{ secrets.DEPLOY_COMMIT_TOKEN }}
+          DEPLOY_BRANCH: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Set the DEPLOY_COMMIT_TOKEN Actions secret to an owner token with Contents read/write access."
+            exit 1
+          fi
+
+          if [ "$(gh api user --jq .login)" != "SjdnDzikran" ]; then
+            echo "::error::DEPLOY_COMMIT_TOKEN must belong to SjdnDzikran."
+            exit 1
+          fi
+
+          for attempt in 1 2 3; do
+            current_head=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$DEPLOY_BRANCH" --jq .object.sha)
+            if [ "$current_head" != "$GITHUB_SHA" ]; then
+              echo "Branch has advanced; skipping this older push."
+              exit 0
+            fi
+
+            if response=$(gh api graphql \
+              -f repository="$GITHUB_REPOSITORY" \
+              -f head="$GITHUB_SHA" \
+              -f branch="$DEPLOY_BRANCH" \
+              -f query='mutation($repository: String!, $head: GitObjectID!, $branch: String!) {
+                createCommitOnBranch(input: {
+                  branch: {repositoryNameWithOwner: $repository, branchName: $branch},
+                  expectedHeadOid: $head,
+                  fileChanges: {additions: [], deletions: []},
+                  message: {headline: "chore: trigger Vercel deployment (automated)"}
+                }) {
+                  commit { url signature { isValid wasSignedByGitHub } }
+                }
+              }'); then
+              if ! jq -e '.data.createCommitOnBranch.commit.signature | .isValid == true and .wasSignedByGitHub == true' <<< "$response" > /dev/null; then
+                echo "::error::GitHub created the commit without a valid GitHub signature."
+                exit 1
+              fi
+              jq -r '.data.createCommitOnBranch.commit.url' <<< "$response"
+              exit 0
+            fi
+          done
+
+          echo "::error::Could not create the verified deployment commit after three attempts."
+          exit 1
